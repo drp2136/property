@@ -134,7 +134,7 @@ module.exports = {
                 MILLISECONDS: 600000, // 10min=10*60*1000
             }
         },
-        SECRET: 'sUPerSeCuREKeY&^$^&$^%$^%7782348723t4872t34Ends',
+        SECRET: 'sUPerSeCuREKeY&^$^&$^%$^%Ends',
     },
     LEVEL: {
         HIERARCHY: [

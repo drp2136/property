@@ -9,40 +9,29 @@
 module.exports = {
 	signUp: signUp,
 	signIn: signIn,
+	logout: logout,
+
 	addProperty: addProperty,
+	getPropertyPic: getPropertyPic,
 	searchNearBy: searchNearBy,
+	deleteOneProperty: deleteOneProperty,
 };
 
 // Import
-const FileType = require('file-type');
 const FS = require('fs');
 const JWT = require('jsonwebtoken');
 const Moment = require('moment');
 const Mongoose = require('mongoose');
-const Multer = require('multer');
 const Path = require('path');
 
 const AppError = require('../../errors/AppError');
 const PropertyService = require('../services/property');
 const UserService = require('../services/user');
+const WebTokenService = require('../services/webToken');
+const CONSTANTS = require('../../utils/Constant');
 const To = require('../../utils/To');
 const VALIDATIONS = require('../../utils/Validation');
 
-
-
-/** Multer Storage function to store the file into project folder.. */
-const storage = Multer.diskStorage({
-	// set the directory for the uploads to the uploaded to
-	destination: (req, file, cb) => {
-		cb(null, path.join(__dirname, '../public/profilePics'));
-	},
-	filename: (req, file, cb) => {
-		// let fileType = file.originalname.split('.');
-		// let picname = req.sesssion_user.user_name + '.' + fileType[fileType.length - 1];
-		let picname = req.sesssion_user.user_name + '.jpg';
-		cb(null, picname);
-	}
-});
 
 
 /**
@@ -62,7 +51,7 @@ async function generateJWTToken(authUser, JWTObj, params, flags) {
 
 		// Prepare
 		let tokenObj = {
-			aud: "User access token",
+			aud: CONSTANTS.JWT.AUDIENCE.USER,
 			exp: Math.ceil(expiry / 1000),
 			iat: Math.ceil(dateTime / 1000),
 			sub: "User login",
@@ -70,7 +59,7 @@ async function generateJWTToken(authUser, JWTObj, params, flags) {
 		};
 
 		// Generate a token
-		let token = await JWT.sign(tokenObj, "sUPerSeCuREKeY");
+		let token = await JWT.sign(tokenObj, CONSTANTS.JWT.SECRET);
 		let userToken = {
 			...tokenObj,
 			user: Mongoose.Types.ObjectId(JWTObj.jti),
@@ -190,6 +179,37 @@ async function signIn(req, res, next) {
 	}
 }
 
+async function logout(req, res, next) {
+	try {
+		let error, result;
+
+		let body = {
+			user: req.authUser.id,
+			token: req.authUser.token, // generated JWT token
+			aud: "User",
+			jti: req.authUser.id,
+			blacklistedOn: Date.now(), // when the token blacklisted, e.g. logout
+		};
+
+		// create
+		[error, result] = await To(WebTokenService.createOne(req.authUser, body, null, null));
+		if (error) {
+			throw new AppError(error.message, error.code, error.data);
+		}
+
+		res.send({ message: "User logged-out successfully.", code: 200, data: null });
+	} catch (error) {
+		if (error && error.code && error.message) {
+			req.logs = { code: error.code, message: error.message, data: error.data };
+		} else {
+			req.logs = { code: 409, message: "Error during the log-out process: " + error, data: {} };
+		}
+		res.send(req.logs);
+	}
+}
+
+
+
 /**
  * insert a new property
  * @param {*} req 
@@ -204,23 +224,26 @@ async function addProperty(req, res, next) {
 		if (!VALIDATIONS.isNonEmptyObject(req.body)) {
 			throw new AppError("No inputs provided.");
 		}
-		if (!VALIDATIONS.isNonEmptyObject(req.body.cooridinates)
-			&& (VALIDATIONS.isNumeric(req.body.cooridinates.lat) && VALIDATIONS.isNumeric(req.body.cooridinates.lng)
-				|| VALIDATIONS.isNumeric(req.body.cooridinates.latitude) && VALIDATIONS.isNumeric(req.body.cooridinates.longitude))
+		if (!(VALIDATIONS.isNumeric(req.body.lat) && VALIDATIONS.isNumeric(req.body.lng))
+			&& !(VALIDATIONS.isNumeric(req.body.latitude) && VALIDATIONS.isNumeric(req.body.longitude))
 		) {
 			throw new AppError("No geo-locations provided.");
 		}
-		let longitude = req.body.longitude || req.body.lng;
-		let latitude = req.body.latitude || req.body.lat;
+		let longitude = +(req.body.longitude || req.body.lng);
+		let latitude = +(req.body.latitude || req.body.lat);
 
-		let body = { ...req.body, images: req.files.map(e => e.path) };
-		body.location = {
-			type: "Point",
-			coordinates: [longitude, latitude],
+		let body = {
+			...req.body,
+			images: req.files.map(e => e.path.replace(`/opt/property/files/property_images/`, `/property/images/`)),
+			location: {
+				type: "Point",
+				coordinates: [longitude, latitude],
+			},
+			createdBy: req.authUser.id,
 		};
 
 		// insert
-		[error, result] = await To(PropertyService.createOne({}, body, null, null));
+		[error, result] = await To(PropertyService.createOne(req.authUser, body, null, null));
 		if (error) {
 			throw new AppError(error.message, error.code, error.data);
 		}
@@ -237,6 +260,54 @@ async function addProperty(req, res, next) {
 			req.logs = { code: 409, message: "Error while adding one porperty: " + error, data: {} };
 		}
 		res.send(req.logs);
+	}
+}
+
+/**
+ * retreive property image
+ * @param {*} authUser 
+ * @param {*} url 
+ * @param {*} params 
+ * @param {*} flags 
+ */
+async function getPropertyPic(authUser, url, params, flags) {
+	try {
+		// Initialize
+		let filePath = null;
+		let isFileExists = false;
+
+		// Prepare file path
+		let photoUrl = url.split("?").shift().split('/').filter(Boolean);
+		let photoPath = photoUrl.slice(1);
+		filePath = Path.join(`/opt/treads/files/property_images/${photoUrl[0]}/` + photoPath.join('/'));
+
+		// images: req.files.map(e => e.path.replace(`/opt/property/files/property_images/`, `/api/property/images/`)),
+
+		// Check if file exists
+		await new Promise((resolve, reject) => {
+			FS.access(filePath, error => {
+				if (error) {
+					isFileExists = false;
+				} else {
+					isFileExists = true;
+				}
+				resolve();
+			});
+		});
+
+		// Response
+		if (isFileExists) {
+			return Promise.resolve({ code: 200, message: "File can be downloaded successfully.", data: filePath, isDownloadFile: true });
+		} else {
+			throw new AppError("File not found.", 404, null);
+		}
+	} catch (error) {
+		if (error && error.code && error.message) {
+			return Promise.reject({ code: error.code, message: error.message, data: error.data });
+		} else {
+			return Promise.reject({ code: 409, message: "Error while fetching users profile pic: " + error });
+		}
+		// next();
 	}
 }
 
@@ -278,5 +349,51 @@ async function searchNearBy(req, res, next) {
 			req.logs = { code: 409, message: "Error while searching properties: " + error, data: {} };
 		}
 		res.send(req.logs);
+	}
+}
+
+async function deleteOneProperty(req, res, next) {
+	try {
+		let error, result;
+
+		if (!VALIDATIONS.isNonEmptyObject(req.params)) {
+			throw new AppError("No property details provided.", 400, null);
+		}
+		if (!VALIDATIONS.isValidMongoObjectId(req.params._propertyId)) {
+			throw new AppError("Property id is not a valid id.", 400, null);
+		}
+
+		// get one property
+		[error, result] = await To(PropertyService.getOne(req.authUser, { _id: req.params._propertyId }, null, null));
+		if (error) {
+			throw new AppError(error.message, error.code, error.data);
+		}
+		if (VALIDATIONS.isSuccessResponseAndNonEmptyObject(result)) {
+			if (req.authUser.id.toString() != result.data.createdBy.toString()) {
+				throw new AppError("Unauthorised access of details", 400, null);
+			}
+
+			// delete a property
+			[error, result] = await To(PropertyService.deleteOne(req.authUser, { _id: req.params._propertyId }, null, null));
+			if (error) {
+				throw new AppError(error.message, error.code, error.data);
+			}
+
+			if (VALIDATIONS.isSuccessResponseAndNonEmptyObject(result)) {
+				res.send(result);
+			} else {
+				throw new AppError('Some problem occured while searching property.', 400, null);
+			}
+		} else {
+			throw new AppError("Property not found", 400, null);
+		}
+	} catch (error) {
+		if (error && error.code && error.message) {
+			req.logs = { code: error.code, message: error.message, data: error.data };
+		} else {
+			req.logs = { code: 409, message: "Error while searching properties: " + error, data: {} };
+		}
+		res.send(req.logs);
+
 	}
 }

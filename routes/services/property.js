@@ -9,6 +9,7 @@ module.exports = {
 	getOne: getOne,
 	createOne: createOne,
 	searchNearBy: searchNearBy,
+	deleteOne: deleteOne,
 };
 
 // Imports
@@ -96,6 +97,13 @@ async function createOne(authUser, property, params, flags) {
 	}
 }
 
+/**
+ * Search near by 
+ * @param {*} authUser 
+ * @param {*} property 
+ * @param {*} params 
+ * @param {*} flags 
+ */
 async function searchNearBy(authUser, property, params, flags) {
 	try {
 		let result, query = {};
@@ -150,6 +158,42 @@ async function searchNearBy(authUser, property, params, flags) {
 		} else {
 			return Promise.reject({ code: 409, message: "Error while seaching properties: " + error });
 		}
+	}
+}
 
+/**
+ * delete one
+ * @param {*} authUser 
+ * @param {*} property 
+ * @param {*} params 
+ * @param {*} flags 
+ */
+async function deleteOne(authUser, property, params, flags) {
+	try {
+		// Initialize
+		let result, query = {};
+
+		// Prepare
+		if (property._id) {
+			query._id = Mongoose.Types.ObjectId(property._id);
+		}
+		// Validate
+		if (!VALIDATIONS.isNonEmptyObject(query)) {
+			throw new AppError("No keys found to delete one property.", 400, null);
+		}
+
+		result = await PropertyModel.deleteOne(query).exec();
+
+		if (result) {
+			return Promise.resolve({ code: 200, message: "Property details retrieved successfully.", data: result });
+		} else {
+			throw new AppError("Property not found.", 404, null);
+		}
+	} catch (error) {
+		if (error && error.code && error.message) {
+			return Promise.reject({ code: error.code, message: error.message, data: error.data });
+		} else {
+			return Promise.reject({ code: 409, message: "Error while deleting a property: " + error });
+		}
 	}
 }

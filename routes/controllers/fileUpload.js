@@ -102,8 +102,9 @@ let storeMultiplePropertyImages = Multer({
             // N.B. File extension can't check, as captured image file may not necessarily come with an extension from UI.
             if (['jpg', 'jpeg', "png"].includes(fileMimeType)) { // Check for file mimeType..
                 let fileSplit = file.originalname.split('.');
-                let filename = (['jpg', 'jpeg', "png"].includes(fileSplit[fileSplit.length - 1])) ? file.originalname : file.originalname + '.' + fileMimeType;
-                cb(null, filename.replace(/ /g, '_'));
+                // let filename = (['jpg', 'jpeg', "png"].includes(fileSplit[fileSplit.length - 1])) ? file.originalname : file.originalname + '.' + fileMimeType;
+                // cb(null, filename.replace(/ /g, '_'));
+                cb(null, Date.now() + '_' + Math.floor((Math.random() * 100) + 1) + '.' + fileMimeType);
             } else {
                 console.error("Property image is not with a valid image file extension.");
                 cb({ message: "Property image is not with a valid image file extension.", code: 409, data: null }, null);
