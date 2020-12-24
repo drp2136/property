@@ -50,6 +50,13 @@ Router.post(
 );
 
 /** Property Search */
+Router.get(
+  '/property/images/*',
+  Intercepter.verifyToken,
+  UserController.getPropertyPic,
+);
+
+/** Property Search */
 Router.post(
   '/property/search',
   Intercepter.verifyToken,

@@ -222,12 +222,12 @@ async function addProperty(req, res, next) {
 
 
 		if (!VALIDATIONS.isNonEmptyObject(req.body)) {
-			throw new AppError("No inputs provided.");
+			throw new AppError("No inputs provided.", 400, null);
 		}
 		if (!(VALIDATIONS.isNumeric(req.body.lat) && VALIDATIONS.isNumeric(req.body.lng))
 			&& !(VALIDATIONS.isNumeric(req.body.latitude) && VALIDATIONS.isNumeric(req.body.longitude))
 		) {
-			throw new AppError("No geo-locations provided.");
+			throw new AppError("No geo-locations provided.", 400, null);
 		}
 		let longitude = +(req.body.longitude || req.body.lng);
 		let latitude = +(req.body.latitude || req.body.lat);
@@ -265,21 +265,20 @@ async function addProperty(req, res, next) {
 
 /**
  * retreive property image
- * @param {*} authUser 
- * @param {*} url 
- * @param {*} params 
- * @param {*} flags 
+ * @param {*} req 
+ * @param {*} res 
+ * @param {*} next 
  */
-async function getPropertyPic(authUser, url, params, flags) {
+async function getPropertyPic(req, res, next) {
 	try {
 		// Initialize
 		let filePath = null;
 		let isFileExists = false;
 
 		// Prepare file path
-		let photoUrl = url.split("?").shift().split('/').filter(Boolean);
-		let photoPath = photoUrl.slice(1);
-		filePath = Path.join(`/opt/treads/files/property_images/${photoUrl[0]}/` + photoPath.join('/'));
+		let photoUrl = req.url.split("?").shift().split('/').filter(Boolean);
+		// let photoPath = photoUrl.slice(2);
+		filePath = Path.join(`/opt/property/files/property_images/${photoUrl[2]}`);
 
 		// images: req.files.map(e => e.path.replace(`/opt/property/files/property_images/`, `/api/property/images/`)),
 
@@ -297,17 +296,17 @@ async function getPropertyPic(authUser, url, params, flags) {
 
 		// Response
 		if (isFileExists) {
-			return Promise.resolve({ code: 200, message: "File can be downloaded successfully.", data: filePath, isDownloadFile: true });
+			res.download(filePath);
 		} else {
 			throw new AppError("File not found.", 404, null);
 		}
 	} catch (error) {
 		if (error && error.code && error.message) {
-			return Promise.reject({ code: error.code, message: error.message, data: error.data });
+			req.logs = { code: error.code, message: error.message, data: error.data };
 		} else {
-			return Promise.reject({ code: 409, message: "Error while fetching users profile pic: " + error });
+			req.logs = { code: 409, message: "Error while downloading property images: " + error, data: {} };
 		}
-		// next();
+		res.send(req.logs);
 	}
 }
 
@@ -322,13 +321,13 @@ async function searchNearBy(req, res, next) {
 		let error, result;
 
 		if (!VALIDATIONS.isNonEmptyObject(req.body)) {
-			throw new AppError("No inputs provided.");
+			throw new AppError("No inputs provided.", 400, null);
 		}
 		if (!VALIDATIONS.isNonEmptyObject(req.body.cooridinates)
 			&& (VALIDATIONS.isNumeric(req.body.cooridinates.lat) && VALIDATIONS.isNumeric(req.body.cooridinates.lng)
 				|| VALIDATIONS.isNumeric(req.body.cooridinates.latitude) && VALIDATIONS.isNumeric(req.body.cooridinates.longitude))
 		) {
-			throw new AppError("No geo-locations provided.");
+			throw new AppError("No geo-locations provided.", 400, null);
 		}
 
 		// search

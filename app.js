@@ -43,6 +43,10 @@ app.use(Helmet.frameguard({ action: 'deny' }));
 // app.use("/documentation/socket", (req, res, next) => { res.render('socket.ejs'); });
 
 app.use('/', Users);
+app.get('/property/images/*', (req, res, next) => {
+  console.log(req.method);
+  res.send({ code: 200, message: 'healthy' });
+});
 
 app.get('/health', (req, res, next) => {
   res.send({ code: 200, message: 'healthy' });
