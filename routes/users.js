@@ -48,12 +48,7 @@ Router.post(
   },
   UserController.addProperty,
 );
-/** Property image download */
-Router.get(
-  '/property/*',
-  Intercepter.verifyToken,
-  UserController.getPropertyPic,
-);
+
 /** Property Search */
 Router.post(
   '/property/search',
